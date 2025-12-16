@@ -1,18 +1,52 @@
+"use client";
+
+import { signIn, signOut, useSession } from "next-auth/react";
+
 export default function Home() {
+  const { data: session, status } = useSession();
+
+  const handleLogin = () => {
+    signIn("google");
+  };
+
+  const handleSignUp = () => {
+    signIn("google");
+  };
+
   return (
     <div className="relative min-h-screen bg-white">
       {/* Navigation Bar */}
       <nav className="fixed top-0 left-0 right-0 flex items-center justify-between px-8 py-6 bg-white/80 backdrop-blur-sm z-50">
-        <div className="text-xl font-medium text-black">
-          Exoskeleton
-        </div>
+        <div className="text-xl font-medium text-black">Exoskeleton</div>
         <div className="flex gap-3">
-          <button className="px-6 py-2 text-sm font-medium text-black border border-gray-300 square-lg hover:bg-gray-50 transition-colors">
-            Login
-          </button>
-          <button className="px-6 py-2 text-sm font-medium text-white bg-black square-lg hover:bg-gray-800 transition-colors">
-            Sign Up
-          </button>
+          {status === "authenticated" ? (
+            <>
+              <span className="px-6 py-2 text-sm font-medium text-black">
+                {session.user?.name || session.user?.email}
+              </span>
+              <button
+                onClick={() => signOut()}
+                className="px-6 py-2 text-sm font-medium text-black border border-gray-300 square-lg hover:bg-gray-50 transition-colors"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleLogin}
+                className="px-6 py-2 text-sm font-medium text-black border border-gray-300 square-lg hover:bg-gray-50 transition-colors"
+              >
+                Login
+              </button>
+              <button
+                onClick={handleSignUp}
+                className="px-6 py-2 text-sm font-medium text-white bg-black square-lg hover:bg-gray-800 transition-colors"
+              >
+                Sign Up
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -26,7 +60,10 @@ export default function Home() {
             Where research meets intelligence.
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
-            <button className="px-8 py-3 text-base font-medium text-white bg-black square-lg hover:bg-gray-800 transition-colors">
+            <button
+              onClick={handleSignUp}
+              className="px-8 py-3 text-base font-medium text-white bg-black square-lg hover:bg-gray-800 transition-colors"
+            >
               Get Started
             </button>
             <button className="px-8 py-3 text-base font-medium text-black border border-gray-300 square-lg hover:bg-gray-50 transition-colors">
