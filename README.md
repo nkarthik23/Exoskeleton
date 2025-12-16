@@ -1,2 +1,2 @@
 # Exoskeleton
-# AI Native Latex Editor
+ AI Native Latex Editor
