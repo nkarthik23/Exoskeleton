@@ -17,6 +17,63 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
     "\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\n\\title{" + documentName + "}\n\\author{}\n\\date{}\n\n\\begin{document}\n\n\\maketitle\n\n\\section{Introduction}\n\nStart writing your content here...\n\n\\end{document}"
   );
   const [aiPrompt, setAiPrompt] = useState("");
+  const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleAiRequest = async (userMessage: string) => {
+    if (!userMessage.trim() || isLoading) return;
+    
+    setIsLoading(true);
+    
+    // Add user message to chat
+    const newMessages = [...messages, { role: "user", content: userMessage }];
+    setMessages(newMessages);
+    setAiPrompt("");
+
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMessage,
+          latexContent: content,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to get AI response");
+      }
+
+      // Add AI response to chat
+      setMessages([...newMessages, { 
+        role: "assistant", 
+        content: data.response 
+      }]);
+    } catch (error: any) {
+      console.error("AI request failed:", error);
+      setMessages([...newMessages, { 
+        role: "assistant", 
+        content: `Sorry, I encountered an error: ${error.message}. Please try again.` 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleQuickAction = async (actionType: string) => {
+    const prompts: Record<string, string> = {
+      equation: "Generate a LaTeX equation template with proper formatting and numbering",
+      table: "Create a professional LaTeX table with 3 columns and 5 rows, including header",
+      figure: "Generate a complete figure environment with caption and label",
+      bibliography: "Show me how to set up a bibliography in LaTeX with BibTeX",
+    };
+    
+    if (prompts[actionType]) {
+      await handleAiRequest(prompts[actionType]);
+    }
+  };
 
   // Redirect to home if not authenticated
   if (status === "unauthenticated") {
@@ -98,41 +155,80 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
           
           {/* Chat/Help Area */}
           <div className="flex-1 p-6 overflow-auto">
-            <div className="space-y-4">
-              {/* Welcome Message */}
-              <div className="bg-white rounded-lg p-4 border border-gray-200">
-                <p className="text-sm text-gray-700">
-                  👋 Hi! I'm your AI assistant. I can help you with:
-                </p>
-                <ul className="mt-2 space-y-1 text-sm text-gray-600">
-                  <li>• Writing LaTeX code</li>
-                  <li>• Formatting equations</li>
-                  <li>• Creating tables and figures</li>
-                  <li>• Citation management</li>
-                  <li>• Document structuring</li>
-                </ul>
-                <p className="mt-3 text-xs text-gray-500 italic">
-                  AI functionality coming soon...
-                </p>
-              </div>
+            {messages.length === 0 ? (
+              <div className="space-y-4">
+                {/* Welcome Message */}
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                  <p className="text-sm text-gray-700">
+                    👋 Hi! I'm your AI assistant powered by Google Gemini. I can help you with:
+                  </p>
+                  <ul className="mt-2 space-y-1 text-sm text-gray-600">
+                    <li>• Writing LaTeX code</li>
+                    <li>• Formatting equations</li>
+                    <li>• Creating tables and figures</li>
+                    <li>• Citation management</li>
+                    <li>• Document structuring</li>
+                  </ul>
+                </div>
 
-              {/* Quick Actions */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-gray-600 uppercase">Quick Actions</p>
-                <button className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200">
-                  Insert equation template
-                </button>
-                <button className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200">
-                  Create table structure
-                </button>
-                <button className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200">
-                  Add figure environment
-                </button>
-                <button className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200">
-                  Format bibliography
-                </button>
+                {/* Quick Actions */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-600 uppercase">Quick Actions</p>
+                  <button 
+                    onClick={() => handleQuickAction("equation")}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                  >
+                    Insert equation template
+                  </button>
+                  <button 
+                    onClick={() => handleQuickAction("table")}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                  >
+                    Create table structure
+                  </button>
+                  <button 
+                    onClick={() => handleQuickAction("figure")}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                  >
+                    Add figure environment
+                  </button>
+                  <button 
+                    onClick={() => handleQuickAction("bibliography")}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                  >
+                    Format bibliography
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-4 rounded-lg ${
+                      msg.role === "user"
+                        ? "bg-blue-50 border border-blue-200"
+                        : "bg-gray-50 border border-gray-200"
+                    }`}
+                  >
+                    <div className="text-xs font-semibold text-gray-500 mb-2">
+                      {msg.role === "user" ? "You" : "AI Assistant"}
+                    </div>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {isLoading && (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full"></div>
+                      <span className="text-sm text-gray-600">AI is thinking...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* AI Input Area */}
@@ -142,15 +238,17 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
                 type="text"
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
-                placeholder="Ask AI for help... (coming soon)"
+                onKeyPress={(e) => e.key === "Enter" && !isLoading && handleAiRequest(aiPrompt)}
+                placeholder="Ask AI for help..."
                 className="flex-1 px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-black"
-                disabled
+                disabled={isLoading}
               />
               <button
-                disabled
-                className="px-4 py-2 text-sm text-white bg-gray-400 rounded-lg cursor-not-allowed"
+                onClick={() => handleAiRequest(aiPrompt)}
+                disabled={isLoading || !aiPrompt.trim()}
+                className="px-4 py-2 text-sm text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                Send
+                {isLoading ? "..." : "Send"}
               </button>
             </div>
           </div>
