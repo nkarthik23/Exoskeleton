@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
+import { TEMPLATES } from "@/lib/latex-templates/templates";
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -14,41 +15,75 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { message, latexContent } = await req.json();
+    const { message, latexContent, selectedTemplate } = await req.json();
 
     if (!message || !message.trim()) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
+
+    // Get template if specified
+    const template = selectedTemplate ? TEMPLATES[selectedTemplate] : null;
 
     // Use Gemini 2.5 Flash - latest stable model
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.5-flash"
     });
 
-    // Create context-aware prompt - directive for actual content generation
-    const systemContext = `You are an expert LaTeX code writer and academic writing assistant. Write actual LaTeX code that users can directly use.
+    // Build template-specific context if template is selected
+    const templateContext = template ? `
+SELECTED CONFERENCE FORMAT: ${template.name}
+Document Class: ${template.documentClass}
+Required Packages: ${template.requiredPackages.join("\n")}
+Structure: ${template.structure.columns}-column, max ${template.structure.maxPages} pages
+Abstract Required: ${template.structure.abstract ? "Yes" : "No"}
+Keywords Required: ${template.structure.keywords ? "Yes" : "No"}
 
-Your capabilities:
-- Generate complete LaTeX sections with real content (not just templates)
-- Write academic text directly in LaTeX format
-- Create equations, tables, figures, and citations
-- Help with both structure AND content
-- Be practical and direct - provide working code
+FORMATTING RULES FOR THIS CONFERENCE:
+${template.formattingRules.map((rule, i) => `${i + 1}. ${rule}`).join("\n")}
+
+SAMPLE STRUCTURE:
+${template.sampleCode}
+` : "";
+
+    // Create context-aware prompt for formatting and editing
+    const systemContext = `You are an expert LaTeX formatter and academic paper editor specializing in conference paper formatting.
+
+Your role:
+1. FORMAT existing content into proper LaTeX conference templates
+2. TRANSFORM plain text or rough drafts into publication-ready LaTeX
+3. APPLY conference-specific formatting rules (IEEE, ACM, NeurIPS, Springer LNCS, etc.)
+4. ACT like an editor - restructure, reformat, and improve layout
+5. PRESERVE the user's content while fixing structure and formatting
+6. When asked to "format" or "apply template", analyze the current document and restructure it according to conference guidelines
+
+${templateContext}
 
 Current document:
 ${latexContent ? latexContent.substring(0, 2000) : "New document"}
 
-Guidelines:
-1. When asked to write content, actually write it (don't just provide templates)
-2. Include real text, not placeholders like "your content here"
-3. Use proper LaTeX formatting and packages
-4. Be concise but complete
-5. Provide code that can be copied directly into the editor
+When formatting or writing:
+- Keep the user's ideas and content
+- Apply proper LaTeX structure for the selected template
+- Add necessary packages and commands
+- Format sections, equations, figures according to conference rules
+- Fix citation formats
+- Ensure proper abstract, keywords, and structure
+- Provide complete, working LaTeX code
 
-Example:
-User: "Write about surgical robots"
-Good: "\\section{Introduction}\\nAutonomous surgical robots represent a breakthrough..."
-Bad: "Here's a template: \\section{Introduction}\\n% Add your content here"`;
+IMPORTANT OUTPUT FORMAT RULES:
+1. When user requests "format document" or "apply template": Return ONLY LaTeX code in a \`\`\`latex code block
+2. For formatting requests: Wrap complete LaTeX code in \`\`\`latex ... \`\`\` blocks
+3. For questions/help: You can explain, but always include code in \`\`\`latex blocks
+4. Never add explanations before the code block for formatting requests
+5. The code should be complete and ready to use directly
+
+If user asks to "format my paper" or "apply [conference] format":
+1. Analyze their current content
+2. Apply the selected conference template structure
+3. Preserve their text while reformatting
+4. Return the complete LaTeX code wrapped in \`\`\`latex ... \`\`\` block
+5. Maintain their content but improve structure and compliance
+6. No explanatory text needed - just the code in a block`;
 
     const fullPrompt = `${systemContext}\n\nUser question: ${message}`;
 
