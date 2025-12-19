@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, use } from "react";
+import { TEMPLATES } from "@/lib/latex-templates/templates";
 
 export default function EditorPage({ params }: { params: Promise<{ documentId: string }> }) {
   const { data: session, status } = useSession();
@@ -19,8 +20,28 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
   const [aiPrompt, setAiPrompt] = useState("");
   const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
-  const handleAiRequest = async (userMessage: string) => {
+  // Helper function to extract LaTeX code from AI response
+  const extractLatexCode = (text: string): string | null => {
+    // Look for code blocks with latex or tex
+    const codeBlockRegex = /```(?:latex|tex)?\n([\s\S]*?)\n```/g;
+    const matches = [...text.matchAll(codeBlockRegex)];
+    
+    if (matches.length > 0) {
+      // Join all code blocks
+      return matches.map(match => match[1]).join('\n\n');
+    }
+    
+    // If no code blocks, check if entire response looks like LaTeX
+    if (text.includes('\\documentclass') || text.includes('\\begin{document}')) {
+      return text.trim();
+    }
+    
+    return null;
+  };
+
+  const handleAiRequest = async (userMessage: string, autoApply: boolean = false) => {
     if (!userMessage.trim() || isLoading) return;
     
     setIsLoading(true);
@@ -37,6 +58,7 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
         body: JSON.stringify({
           message: userMessage,
           latexContent: content,
+          selectedTemplate: selectedTemplate,
         }),
       });
 
@@ -51,6 +73,14 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
         role: "assistant", 
         content: data.response 
       }]);
+
+      // Auto-apply if requested (for format actions)
+      if (autoApply) {
+        const extractedCode = extractLatexCode(data.response);
+        if (extractedCode) {
+          setContent(extractedCode);
+        }
+      }
     } catch (error: any) {
       console.error("AI request failed:", error);
       setMessages([...newMessages, { 
@@ -73,6 +103,26 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
     if (prompts[actionType]) {
       await handleAiRequest(prompts[actionType]);
     }
+  };
+
+  const handleFormatDocument = async () => {
+    const templateName = selectedTemplate ? TEMPLATES[selectedTemplate].name : "standard LaTeX";
+    await handleAiRequest(
+      `Format my entire document according to ${templateName} guidelines. Keep all my content but restructure it properly with correct packages, structure, and formatting. Return ONLY the complete formatted LaTeX code in a code block, no explanations.`,
+      true  // AUTO-APPLY to editor
+    );
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!selectedTemplate) {
+      alert("Please select a conference format first");
+      return;
+    }
+    
+    await handleAiRequest(
+      `Convert my document to ${TEMPLATES[selectedTemplate].name} format. Apply all formatting rules, fix structure, ensure compliance with conference requirements, and maintain all my content. Return ONLY the complete reformatted LaTeX code in a code block without explanations.`,
+      true  // AUTO-APPLY to editor
+    );
   };
 
   // Redirect to home if not authenticated
@@ -153,6 +203,51 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
             <h2 className="text-sm font-medium text-gray-700">AI Assistant</h2>
           </div>
           
+          {/* Template Selector */}
+          <div className="px-6 py-3 border-b border-gray-200 bg-white">
+            <label className="text-xs font-medium text-gray-600 uppercase block mb-2">
+              Conference Format
+            </label>
+            <select
+              value={selectedTemplate || ""}
+              onChange={(e) => setSelectedTemplate(e.target.value || null)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-black"
+            >
+              <option value="">General LaTeX</option>
+              {Object.values(TEMPLATES).map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+            {selectedTemplate && (
+              <p className="mt-2 text-xs text-gray-500">
+                {TEMPLATES[selectedTemplate].description}
+              </p>
+            )}
+          </div>
+
+          {/* Smart Formatting Actions */}
+          <div className="px-6 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
+            <p className="text-xs font-medium text-gray-600 uppercase mb-2">Smart Formatting</p>
+            <div className="space-y-2">
+              <button 
+                onClick={handleFormatDocument}
+                disabled={isLoading}
+                className="w-full text-left px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                🎨 Format Entire Document
+              </button>
+              <button 
+                onClick={handleApplyTemplate}
+                disabled={!selectedTemplate || isLoading}
+                className="w-full text-left px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                📄 Apply Conference Template
+              </button>
+            </div>
+          </div>
+          
           {/* Chat/Help Area */}
           <div className="flex-1 p-6 overflow-auto">
             {messages.length === 0 ? (
@@ -203,20 +298,34 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
             ) : (
               <div className="space-y-4">
                 {messages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-4 rounded-lg ${
-                      msg.role === "user"
-                        ? "bg-blue-50 border border-blue-200"
-                        : "bg-gray-50 border border-gray-200"
-                    }`}
-                  >
-                    <div className="text-xs font-semibold text-gray-500 mb-2">
-                      {msg.role === "user" ? "You" : "AI Assistant"}
+                  <div key={idx} className="space-y-2">
+                    <div
+                      className={`p-4 rounded-lg ${
+                        msg.role === "user"
+                          ? "bg-blue-50 border border-blue-200"
+                          : "bg-gray-50 border border-gray-200"
+                      }`}
+                    >
+                      <div className="text-xs font-semibold text-gray-500 mb-2">
+                        {msg.role === "user" ? "You" : "AI Assistant"}
+                      </div>
+                      <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                        {msg.content}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                      {msg.content}
-                    </div>
+                    
+                    {/* Apply to Editor button for AI responses with LaTeX code */}
+                    {msg.role === "assistant" && extractLatexCode(msg.content) && (
+                      <button
+                        onClick={() => {
+                          const code = extractLatexCode(msg.content);
+                          if (code) setContent(code);
+                        }}
+                        className="px-4 py-2 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        ✅ Apply to Editor
+                      </button>
+                    )}
                   </div>
                 ))}
                 {isLoading && (
