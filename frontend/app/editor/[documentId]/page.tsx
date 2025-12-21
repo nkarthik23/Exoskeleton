@@ -5,6 +5,48 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, use } from "react";
 import { TEMPLATES } from "@/lib/latex-templates/templates";
 
+// Button component following best practices
+interface ButtonProps {
+  onClick: () => void;
+  variant?: 'primary' | 'secondary' | 'success';
+  size?: 'sm' | 'md';
+  disabled?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}
+
+const Button = ({ 
+  onClick, 
+  variant = 'primary', 
+  size = 'md', 
+  disabled = false, 
+  children,
+  className = ''
+}: ButtonProps) => {
+  const baseStyles = "font-medium rounded-lg transition-colors";
+  
+  const variantStyles = {
+    primary: "text-white bg-black hover:bg-gray-800 disabled:bg-gray-400",
+    secondary: "text-black border border-gray-300 hover:bg-gray-50 disabled:border-gray-200",
+    success: "text-white bg-black hover:bg-gray-800 disabled:bg-gray-400"
+  };
+  
+  const sizeStyles = {
+    sm: "px-4 py-2 text-xs",
+    md: "px-6 py-2 text-sm"
+  };
+  
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className} disabled:cursor-not-allowed`}
+    >
+      {children}
+    </button>
+  );
+};
+
 export default function EditorPage({ params }: { params: Promise<{ documentId: string }> }) {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -228,22 +270,22 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
           </div>
 
           {/* Smart Formatting Actions */}
-          <div className="px-6 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
+          <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
             <p className="text-xs font-medium text-gray-600 uppercase mb-2">Smart Formatting</p>
             <div className="space-y-2">
               <button 
                 onClick={handleFormatDocument}
                 disabled={isLoading}
-                className="w-full text-left px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full text-left px-4 py-2 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                🎨 Format Entire Document
+                Format Entire Document
               </button>
               <button 
                 onClick={handleApplyTemplate}
                 disabled={!selectedTemplate || isLoading}
-                className="w-full text-left px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full text-left px-4 py-2 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                📄 Apply Conference Template
+                Apply Conference Template
               </button>
             </div>
           </div>
@@ -316,15 +358,16 @@ export default function EditorPage({ params }: { params: Promise<{ documentId: s
                     
                     {/* Apply to Editor button for AI responses with LaTeX code */}
                     {msg.role === "assistant" && extractLatexCode(msg.content) && (
-                      <button
+                      <Button
                         onClick={() => {
                           const code = extractLatexCode(msg.content);
                           if (code) setContent(code);
                         }}
-                        className="px-4 py-2 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                        variant="success"
+                        size="sm"
                       >
-                        ✅ Apply to Editor
-                      </button>
+                        Apply to Editor
+                      </Button>
                     )}
                   </div>
                 ))}
